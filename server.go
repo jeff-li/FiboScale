@@ -3,8 +3,8 @@ package main
 // Sample run-helloworld is a minimal Cloud Run service.
 
 import (
+	"encoding/json"
 	"fmt"
-	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -20,6 +20,11 @@ type WebPage struct {
 	Content string
 }
 
+type SlackUrlVerification struct {
+	Token     string `json:"token"`
+	Challenge string `json:"challenge"`
+}
+
 func main() {
 	log.Print("starting server...")
 	http.HandleFunc("/", homeHandler)
@@ -29,7 +34,7 @@ func main() {
 	// Determine port for HTTP service.
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "9000"
+		port = "8080"
 		log.Printf("defaulting to port %s", port)
 	}
 
@@ -46,13 +51,8 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		name = "World"
 	}
 
-	page := WebPage{Title: "Welcome", Content: "Hellow world"}
-	t, err := template.ParseFiles("basictemplate.html")
-
-	if err != nil {
-		log.Fatal(err)
-	}
-	t.Execute(w, page)
+	page := WebPage{Title: "Welcome", Content: "Hello world"}
+	fmt.Fprintf(w, "<h1>%s</h1><p>%s</p>", page.Title, page.Content)
 }
 
 func slackTestHandler(w http.ResponseWriter, r *http.Request) {
@@ -93,14 +93,20 @@ func slackActionEndpoint(w http.ResponseWriter, r *http.Request) {
 	// Verifies ownership of an Events API Request URL
 	switch r.Method {
 	case "POST":
-		// Call ParseForm() to parse the raw query and update r.PostForm and r.Form.
-		if err := r.ParseForm(); err != nil {
-			fmt.Fprintf(w, "ParseForm() err: %v", err)
+		// Declare a new Person struct.
+		var t SlackUrlVerification
+
+		// Try to decode the request body into the struct. If there is an error,
+		// respond to the client with the error message and a 400 status code.
+		d := json.NewDecoder(r.Body)
+
+		err := d.Decode(&t)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-
-		challenge := r.FormValue("challenge")
-		w.Write([]byte(challenge))
+		log.Printf("REQUEST BODY: %s", t)
+		w.Write([]byte(t.Challenge))
 	default:
 		fmt.Fprintf(w, "Sorry, only POST method is supported.")
 	}
